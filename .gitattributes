@@ -7,3 +7,9 @@
 
 # help github's language detection and syntax highlighting
 *.cfg linguist-language=INI
+
+# samguk: pin line endings (bash needs LF, cmd needs CRLF), independent of core.autocrlf
+utils/samguk/*.sh text eol=lf
+utils/samguk/*.py text eol=lf
+utils/samguk/*.cmd text eol=crlf
+/samguk.cmd text eol=crlf

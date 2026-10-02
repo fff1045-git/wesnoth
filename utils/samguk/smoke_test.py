@@ -56,7 +56,7 @@ def run_battle(exe, core, era, scenario, side1, side2, turns, validate):
         cmd.append("--validate-core")
     started = time.time()
     proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                          errors="replace", timeout=1800)
+                          errors="replace", timeout=1800, cwd=ROOT / "build")
     text = proc.stdout + proc.stderr
     for log in sorted(USERDATA.rglob("*.log")):
         text += log.read_text(encoding="utf-8", errors="replace")
