@@ -38,7 +38,7 @@ Wesnoth 엔진과 게임 규칙은 그대로 두고, 세계관을 한국 삼국�
 - 설정: `-DCMAKE_BUILD_TYPE=Release -DVCPKG_TARGET_TRIPLET=x64-windows -DENABLE_SERVER=OFF -DENABLE_CAMPAIGN_SERVER=OFF -DENABLE_TESTS=OFF -DENABLE_NLS=OFF`
 - 출력 디렉터리: `build/` (git에 넣지 않음)
 - `ENABLE_NLS=OFF`이므로 한국어 엔진 번역(`.mo`)은 Git for Windows의 `msgfmt`로 `translations/ko/LC_MESSAGES/`에 따로 컴파일한다.
-- 빌드 스크립트는 `MSYSTEM`, `MSYS`, `SHELL` 환경 변수를 비우고 실행한다. Git Bash의 `MSYSTEM=MINGW64`가 vcpkg 내부 msys2로 새면 ICU가 mingw 환경으로 잘못 인식되어 `install-sh` 경로 오류로 실패한다(2026-10-02 실측).
+- 빌드 스크립트는 vcpkg 캐시(`VCPKG_DOWNLOADS`, `VCPKG_DEFAULT_BINARY_CACHE`, `X_VCPKG_REGISTRIES_CACHE`)를 `build\vcpkg-cache` 아래로 지정한다. MSIX 앱(Claude 데스크톱 등)에서 실행하면 `%LOCALAPPDATA%`가 패키지 전용 폴더로 가상화된다. 그러면 msys2가 보는 실제 루트와 vcpkg가 PATH에 넣는 논리 경로가 어긋나고, autoconf가 `install`을 찾지 못해 ICU 빌드가 `install-sh` 경로 오류로 실패한다(2026-10-02 실측, 캐시를 옮긴 뒤 `/usr/bin/install -c`로 정상 인식 확인).
 - 대안: 빌드가 막히면 공식 1.18.8 실행 파일에 `--data-dir`로 이 저장소를 지정해 실행한다.
 
 ### 3.2 커스텀 코어
