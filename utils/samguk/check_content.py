@@ -203,6 +203,18 @@ def hangang_map_meets_design():
     return problems
 
 
+@check
+def logo_is_wired():
+    problems = []
+    main_cfg = read(CORE / "_main.cfg")
+    for name in ("samguk-logo.png", "samguk-logo-bg.png"):
+        if not (CORE / "images" / "misc" / name).exists():
+            problems.append(f"data/samguk/images/misc/{name}이 없다")
+        if f'"misc/{name}"' not in main_cfg:
+            problems.append(f"_main.cfg가 misc/{name}을 쓰지 않는다")
+    return problems
+
+
 def main():
     failed = 0
     for fn in CHECKS:

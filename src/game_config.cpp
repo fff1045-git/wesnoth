@@ -565,7 +565,7 @@ color_t blue_to_white(double val, bool for_text)
 
 std::string get_default_title_string()
 {
-	std::string ret = _("The Battle for Wesnoth") + " - " + revision;
+	std::string ret = std::string("삼국: 한강의 패권") + " - " + revision;
 	return ret;
 }
 
