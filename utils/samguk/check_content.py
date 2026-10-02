@@ -93,6 +93,55 @@ def units_are_consistent():
     return problems
 
 
+def faction_files():
+    return sorted((CORE / "multiplayer" / "factions").glob("*.cfg"))
+
+
+def scenario_files():
+    return sorted((CORE / "multiplayer" / "scenarios").glob("*.cfg"))
+
+
+@check
+def factions_reference_known_units():
+    problems = []
+    ids = unit_ids()
+    files = faction_files()
+    if {p.stem for p in files} != {"goguryeo", "baekje"}:
+        problems.append(f"세력 파일이 다르다: {[p.name for p in files]}")
+    for path in files:
+        text = read(path)
+        for key in ("recruit", "leader", "random_leader"):
+            for value in re.findall(rf"^    {key}=(.*)$", text, re.M):
+                for uid in (v.strip() for v in value.split(",")):
+                    if uid not in ids:
+                        problems.append(f"{path.relative_to(ROOT).as_posix()}: {key}에 없는 유닛 {uid}")
+    return problems
+
+
+@check
+def era_includes_all_factions():
+    era = CORE / "multiplayer" / "era.cfg"
+    if not era.exists():
+        return ["data/samguk/multiplayer/era.cfg가 없다"]
+    text = read(era)
+    return [f"era.cfg가 {p.name}를 include하지 않는다"
+            for p in faction_files()
+            if f"{{samguk/multiplayer/factions/{p.name}}}" not in text]
+
+
+@check
+def scenario_maps_exist():
+    files = scenario_files()
+    if not files:
+        return ["시나리오가 없다"]
+    problems = []
+    for path in files:
+        for map_file in re.findall(r"^    map_file=(.*)$", read(path), re.M):
+            if not (DATA / map_file.strip()).exists():
+                problems.append(f"{path.relative_to(ROOT).as_posix()}: 맵 파일이 없다 {map_file}")
+    return problems
+
+
 def main():
     failed = 0
     for fn in CHECKS:
