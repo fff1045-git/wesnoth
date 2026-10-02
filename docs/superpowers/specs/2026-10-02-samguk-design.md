@@ -38,6 +38,7 @@ Wesnoth 엔진과 게임 규칙은 그대로 두고, 세계관을 한국 삼국�
 - 설정: `-DCMAKE_BUILD_TYPE=Release -DVCPKG_TARGET_TRIPLET=x64-windows -DENABLE_SERVER=OFF -DENABLE_CAMPAIGN_SERVER=OFF -DENABLE_TESTS=OFF -DENABLE_NLS=OFF`
 - 출력 디렉터리: `build/` (git에 넣지 않음)
 - `ENABLE_NLS=OFF`이므로 한국어 엔진 번역(`.mo`)은 Git for Windows의 `msgfmt`로 `translations/ko/LC_MESSAGES/`에 따로 컴파일한다.
+- 빌드 스크립트는 `MSYSTEM`, `MSYS`, `SHELL` 환경 변수를 비우고 실행한다. Git Bash의 `MSYSTEM=MINGW64`가 vcpkg 내부 msys2로 새면 ICU가 mingw 환경으로 잘못 인식되어 `install-sh` 경로 오류로 실패한다(2026-10-02 실측).
 - 대안: 빌드가 막히면 공식 1.18.8 실행 파일에 `--data-dir`로 이 저장소를 지정해 실행한다.
 
 ### 3.2 커스텀 코어
@@ -49,9 +50,17 @@ Wesnoth 엔진과 게임 규칙은 그대로 두고, 세계관을 한국 삼국�
 [core]
     id=samguk
     name= _ "삼국: 한강의 패권"
-    path="data/samguk"
+    path="samguk"
 [/core]
 ```
+
+`path`는 `data/` 기준 상대 경로이고(`filesystem::get_wml_location`), 디렉터리를 가리키면 그 안의 `_main.cfg`를 읽는다.
+
+엔진이 알아 두어야 할 동작:
+- `[units]` 블록은 여러 개여도 하나로 합쳐 읽는다(`merged_children_view("units")`). 우리 종족과 유닛은 별도 `[units]` 블록에 둔다.
+- 기본 이동 타입, 공통 특성, 기본 종족은 `data/core/units.cfg` 안에 있다. 이 파일의 기본 유닛 디렉터리 include 부분만 `#ifndef SAMGUK_CORE` … `#endif`로 감싸는 **2줄 수정**을 하고, 우리 `_main.cfg`가 `SAMGUK_CORE`를 정의한 뒤 이 파일을 include한다. 기본 코어는 `SAMGUK_CORE`를 정의하지 않으므로 동작이 그대로다.
+- 디렉터리 include(`{dir/}`)는 그 디렉터리의 `.cfg` 파일과, `_main.cfg`가 있는 하위 디렉터리만 읽는다. 그래서 `units/goguryeo/`, `units/baekje/`는 따로 include한다.
+- `[game_config]`는 첫 번째 블록만 읽는다(`mandatory_child`). 이미지 검색 경로(`[binary_path]`)는 선언 순서가 아니라 알파벳 순서(`std::set`)로 찾는다.
 
 파일 구성:
 
@@ -70,7 +79,7 @@ data/samguk/
     scenarios/2p_Hangang.cfg
     scenarios/2p_Gwanmiseong.cfg
     maps/2p_Hangang.map
-  images/misc/logo-samguk.png
+  images/misc/samguk-logo.png, samguk-logo-bg.png
 ```
 
 ### 3.3 `_main.cfg`가 기본 데이터에서 가져오는 것
@@ -86,15 +95,26 @@ data/samguk/
 | `[multiplayer_side] id=Custom`, `[binary_path] data/core` | 엔진 필수, 기존 그래픽 경로 |
 | `[textdomain]` 선언들 | 번역 도메인 |
 
-뺀 것: `core/units.cfg`(우리 `units.cfg`로 대체), `multiplayer/`(우리 `multiplayer/`로 대체), `campaigns/`.
+| `core/units.cfg` (`SAMGUK_CORE` 정의 상태) | 이동 타입, 공통 특성, 기본 종족, `fake` 유닛. 기본 유닛 타입은 빠진다 |
 
-로고는 `game_config.cfg`를 include한 뒤 `data/samguk/_main.cfg`에서 `[game_config]`의 `game_logo` 값을 우리 이미지로 덮어쓴다. 덮어쓰기가 동작하지 않으면 9장의 대안(`[binary_path]` 순서)으로 바꾼다.
+뺀 것: 기본 유닛 타입, `multiplayer/`(우리 `multiplayer/`로 대체), `campaigns/`.
+
+로고는 `game_config.cfg`를 include한 뒤 WML 병합 문법으로 경로만 바꾼다. 이미지 파일명은 기본 로고와 겹치지 않게 `misc/samguk-logo.png`로 한다(같은 이름으로 덮어쓰는 방식은 검색 순서 때문에 동작하지 않는다).
+
+```
+[+game_config]
+    [+images]
+        game_logo="misc/samguk-logo.png"
+        game_logo_background="misc/samguk-logo-bg.png"
+    [/images]
+[/game_config]
+```
 
 ### 3.4 유닛 제작 방식
 원본 유닛 `.cfg`를 복사한 뒤 다음만 바꾼다.
 
 - `id`, `name`, `description`, `race`, `advances_to`
-- 텍스트 도메인: `#textdomain wesnoth-samguk`
+- 텍스트 도메인은 원본(`wesnoth-units`) 그대로 둔다. 바꾸면 공격 이름 같은 원본 문자열의 한국어 번역이 끊긴다. 우리 한국어 문자열은 번역이 없으니 원문 그대로 표시된다.
 
 스탯, 공격, 저항, 이동 타입, 애니메이션, 이미지 경로는 원본 그대로 둔다. 아트를 교체할 때는 이미지 경로만 바꾼다.
 유닛 id는 영문 소문자로 `gog_`, `bae_` 접두어를 붙인다(예: `gog_spearman`).
@@ -132,7 +152,7 @@ data/samguk/
 - 지휘관 후보: 장군, 장창수, 장궁수, 백일관, 기마궁수
 - AI 징집 패턴: `fighter,fighter,archer,mixed fighter,scout`
 
-### 4.2 백제 (중립 정규군과 밤에 강한 도깨비, 수군·불교·화공)
+### 4.2 백제 (낮에 강한 정규군, 해 질 녘과 새벽에 강한 승병, 밤에 강한 도깨비. 수군·불교·화공)
 
 | id | 이름 | 레벨 | 원본 |
 |---|---|---|---|
@@ -159,7 +179,7 @@ data/samguk/
 
 - 징집: 백제 보병, 척후병, 화공병, 승병, 수군, 도깨비
 - 지휘관 후보: 좌평, 검대, 화공대, 의승, 큰도깨비
-- AI 징집 패턴: `fighter,fighter,archer,healer,mixed fighter,scout`
+- AI 징집 패턴: `fighter,fighter,archer,healer,fighter` (백제 징집 유닛에는 scout, mixed fighter 용도가 없다)
 
 ### 4.3 종족
 
@@ -190,10 +210,10 @@ data/samguk/
 | 항목 | 방법 |
 |---|---|
 | 게임명 | 「삼국: 한강의 패권」(가제). 코어 이름, 창 제목, 로고에 쓴다 |
-| 창 제목 | `src/game_config.cpp`의 `_("The Battle for Wesnoth")`를 게임명으로 바꾼다 (유일한 C++ 수정) |
+| 창 제목 | `src/game_config.cpp`의 `_("The Battle for Wesnoth")`를 게임명으로 바꾼다 (유일한 C++ 수정). MSVC는 `/utf-8`로 컴파일하므로 한글 리터럴을 그대로 쓴다 |
 | 로고 | 게임명 텍스트 로고 PNG를 Python(Pillow)으로 만든다. 한글 폰트는 저장소의 `fonts/DroidSansFallbackFull.ttf` |
 | 타이틀 배경 | 기존 그림 유지 |
-| 실행기 | 저장소 루트의 `samguk.cmd`: `build\wesnoth.exe --data-dir <저장소> --core samguk --language ko_KR` |
+| 실행기 | 저장소 루트의 `samguk.cmd`: `build\wesnoth.exe --data-dir <저장소> --userdata-dir Samguk --core samguk --language ko_KR`. 사용자 데이터는 `문서\My Games\Samguk`에 따로 둬서 설치된 Wesnoth와 섞이지 않게 한다 |
 
 ## 7. 한글화
 - 우리 WML 텍스트는 한국어로 직접 쓴다. `_ "..."` 표시는 유지해 나중에 번역 파일을 만들 수 있게 한다. 번역이 없으면 gettext가 원문(한국어)을 그대로 돌려준다.
@@ -215,7 +235,7 @@ data/samguk/
 | vcpkg 의존성 빌드 실패 | 로그로 원인 확인, 실패하면 공식 1.18.8 실행 파일 + `--data-dir` |
 | 기본 데이터 일부를 빼서 생기는 누락 참조 (도움말, Lua, 편집기가 기본 유닛을 참조) | 자동 대전과 실행 로그로 찾아내고, 해당 include를 추가하거나 참조를 제거 |
 | 종족 변경(merfolk → baekje)으로 인한 특성 차이 | 의도된 변경으로 받아들임 |
-| `[game_config]` 로고 덮어쓰기 불가 | 이미지 경로 우선순위(`[binary_path]` 순서) 방식으로 전환 |
+| `[+game_config]` 병합으로 로고가 바뀌지 않음 | `data/game_config.cfg`를 `data/samguk/game_config.cfg`로 복사해 로고 경로를 바꾸고 그것을 include |
 
 ## 10. 산출물
 - `samguk` 브랜치의 커밋들
