@@ -142,6 +142,67 @@ def scenario_maps_exist():
     return problems
 
 
+def read_map(path):
+    return [[cell.strip() for cell in line.split(",")]
+            for line in read(path).splitlines() if line.strip()]
+
+
+def strip_start(code):
+    """'1 Kh' 같은 시작 위치 표시를 떼고 지형 코드만 남긴다."""
+    return code.split(" ", 1)[1] if " " in code else code
+
+
+def hex_neighbors(x, y, w, h):
+    """맵 파일 좌표(테두리 포함) 기준 이웃. 짝수 열이 반 칸 아래로 내려가 있다."""
+    if x % 2 == 0:
+        cand = [(x, y - 1), (x, y + 1), (x + 1, y), (x + 1, y + 1), (x - 1, y), (x - 1, y + 1)]
+    else:
+        cand = [(x, y - 1), (x, y + 1), (x + 1, y - 1), (x + 1, y), (x - 1, y - 1), (x - 1, y)]
+    return [(a, b) for a, b in cand if 0 <= a < w and 0 <= b < h]
+
+
+@check
+def hangang_map_meets_design():
+    path = CORE / "multiplayer" / "maps" / "2p_Hangang.map"
+    if not path.exists():
+        return ["data/samguk/multiplayer/maps/2p_Hangang.map이 없다"]
+    rows = read_map(path)
+    h, w = len(rows), len(rows[0])
+    if any(len(r) != w for r in rows):
+        return ["행 길이가 서로 다르다"]
+    problems = []
+    if w % 2 or h % 2:
+        problems.append(f"점대칭을 위해 가로세로가 짝수여야 한다: {w}x{h}")
+    asym = [(x, y) for y in range(h) for x in range(w)
+            if strip_start(rows[y][x]) != strip_start(rows[h - 1 - y][w - 1 - x])]
+    if asym:
+        problems.append(f"점대칭이 아닌 칸 {len(asym)}개, 예: {asym[:5]}")
+    starts = {}
+    for y in range(h):
+        for x in range(w):
+            if " " in rows[y][x]:
+                starts.setdefault(rows[y][x].split()[0], []).append((x, y))
+    if sorted(starts) != ["1", "2"] or any(len(v) != 1 for v in starts.values()):
+        problems.append(f"시작 위치가 1, 2 하나씩이 아니다: {starts}")
+    else:
+        for side, [(x, y)] in sorted(starts.items()):
+            castles = [rows[b][a] for a, b in hex_neighbors(x, y, w, h) if rows[b][a].startswith("C")]
+            if len(castles) != 6:
+                problems.append(f"{side}번 본진 둘레의 성 칸이 {len(castles)}개다 (기대값 6)")
+    villages = [(x, y) for y in range(1, h - 1) for x in range(1, w - 1) if "^V" in rows[y][x]]
+    north = sum(1 for _, y in villages if y < h // 2)
+    if not 16 <= len(villages) <= 18 or north * 2 != len(villages):
+        problems.append(f"마을 {len(villages)}개, 북쪽 {north}개 (16~18개이고 남북이 같아야 한다)")
+    ford_cols = {x for y in range(h) for x in range(w) if rows[y][x] == "Wwf"}
+    bridge_cols = {x for y in range(h) for x in range(w) if "^Bsb" in rows[y][x]}
+    # 여울 3곳 = 좌우 2곳(각 1열) + 가운데 1곳(2열에 걸침)
+    if len(ford_cols) != 4:
+        problems.append(f"여울이 걸친 열이 {sorted(ford_cols)} (기대값 4열: 좌우 1열씩 + 가운데 2열)")
+    if len(bridge_cols) != 2:
+        problems.append(f"다리가 걸친 열이 {sorted(bridge_cols)} (기대값 2열)")
+    return problems
+
+
 def main():
     failed = 0
     for fn in CHECKS:
