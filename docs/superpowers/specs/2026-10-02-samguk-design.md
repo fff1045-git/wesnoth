@@ -35,7 +35,8 @@ Wesnoth 엔진과 게임 규칙은 그대로 두고, 세계관을 한국 삼국�
 
 ### 3.1 빌드
 - 도구: Visual Studio 2022 Community, VS에 들어 있는 vcpkg(매니페스트 모드, `vcpkg.json`), Ninja
-- 설정: `-DCMAKE_BUILD_TYPE=Release -DVCPKG_TARGET_TRIPLET=x64-windows -DENABLE_SERVER=OFF -DENABLE_CAMPAIGN_SERVER=OFF -DENABLE_TESTS=OFF -DENABLE_NLS=OFF`
+- 사전 준비: `git submodule update --init --recursive`
+- 설정: `-DCMAKE_BUILD_TYPE=Release -DVCPKG_OVERLAY_TRIPLETS=utils/samguk/triplets -DVCPKG_TARGET_TRIPLET=x64-windows-release -DENABLE_SERVER=OFF -DENABLE_CAMPAIGN_SERVER=OFF -DENABLE_TESTS=OFF -DENABLE_NLS=OFF`. 트리플렛 `x64-windows-release`는 오버레이로 추가한 릴리스 전용 트리플렛이라 디버그용 의존성을 빌드하지 않는다.
 - 출력 디렉터리: `build/` (git에 넣지 않음)
 - `ENABLE_NLS=OFF`이므로 한국어 엔진 번역(`.mo`)은 Git for Windows의 `msgfmt`로 `translations/ko/LC_MESSAGES/`에 따로 컴파일한다.
 - 빌드 스크립트는 vcpkg 캐시(`VCPKG_DOWNLOADS`, `VCPKG_DEFAULT_BINARY_CACHE`, `X_VCPKG_REGISTRIES_CACHE`)를 `build\vcpkg-cache` 아래로 지정한다. MSIX 앱(Claude 데스크톱 등)에서 실행하면 `%LOCALAPPDATA%`가 패키지 전용 폴더로 가상화된다. 그러면 msys2가 보는 실제 루트와 vcpkg가 PATH에 넣는 논리 경로가 어긋나고, autoconf가 `install`을 찾지 못해 ICU 빌드가 `install-sh` 경로 오류로 실패한다(2026-10-02 실측, 캐시를 옮긴 뒤 `/usr/bin/install -c`로 정상 인식 확인).
@@ -68,6 +69,7 @@ Wesnoth 엔진과 게임 규칙은 그대로 두고, 세계관을 한국 삼국�
 data/samguk/
   _main.cfg                 루트. 아래 3.3의 필수 요소 + 우리 콘텐츠를 include
   README.md                 실행 방법
+  game_config.cfg           data/game_config.cfg 복사본 (로고 경로 두 줄만 다름, 3.3 참고)
   units.cfg                 [units]: 기본 이동 타입, 특성, 우리 종족, 우리 유닛 디렉터리
   units/goguryeo/*.cfg      고구려 유닛 20종
   units/baekje/*.cfg        백제 유닛 20종
@@ -99,7 +101,7 @@ data/samguk/
 
 뺀 것: 기본 유닛 타입, `multiplayer/`(우리 `multiplayer/`로 대체), `campaigns/`.
 
-로고는 `game_config.cfg`를 include한 뒤 WML 병합 문법으로 경로만 바꾼다. 이미지 파일명은 기본 로고와 겹치지 않게 `misc/samguk-logo.png`로 한다(같은 이름으로 덮어쓰는 방식은 검색 순서 때문에 동작하지 않는다).
+로고 경로는 처음에 `game_config.cfg`를 include한 뒤 `[+game_config]` 병합 문법으로 바꾸려 했다.
 
 ```
 [+game_config]
@@ -109,6 +111,8 @@ data/samguk/
     [/images]
 [/game_config]
 ```
+
+**수정(구현 결과):** 이 병합은 `--validate-core`를 통과하지 못했다. 병합 결과가 아니라 두 번째의 불완전한 `[game_config]` 블록으로 검증되어 필수 하위 태그 누락 error가 났다. 그래서 `data/samguk/game_config.cfg`를 `data/game_config.cfg`의 복사본으로 두고 `game_logo`, `game_logo_background` 두 줄만 바꾼 뒤 `{samguk/game_config.cfg}`로 include한다. 복사본 맨 위에 설명 주석 3줄이 붙는다. 기본 파일이 바뀌면 복사본도 맞춰야 하며, `utils/samguk/check_content.py`의 `game_config_copy_matches_upstream`이 어긋남을 잡는다. 이미지 파일명은 기본 로고와 겹치지 않게 `misc/samguk-logo.png`로 한다(같은 이름으로 덮어쓰는 방식은 검색 순서 때문에 동작하지 않는다).
 
 ### 3.4 유닛 제작 방식
 원본 유닛 `.cfg`를 복사한 뒤 다음만 바꾼다.
@@ -235,7 +239,7 @@ data/samguk/
 | vcpkg 의존성 빌드 실패 | 로그로 원인 확인, 실패하면 공식 1.18.8 실행 파일 + `--data-dir` |
 | 기본 데이터 일부를 빼서 생기는 누락 참조 (도움말, Lua, 편집기가 기본 유닛을 참조) | 자동 대전과 실행 로그로 찾아내고, 해당 include를 추가하거나 참조를 제거 |
 | 종족 변경(merfolk → baekje)으로 인한 특성 차이 | 의도된 변경으로 받아들임 |
-| `[+game_config]` 병합으로 로고가 바뀌지 않음 | `data/game_config.cfg`를 `data/samguk/game_config.cfg`로 복사해 로고 경로를 바꾸고 그것을 include |
+| `[+game_config]` 병합으로 로고가 바뀌지 않음 | **이 대응책을 실제로 택했다.** 병합은 `--validate-core`에서 실패했다. `data/game_config.cfg`를 `data/samguk/game_config.cfg`로 복사해 로고 경로 두 줄만 바꾸고 그것을 include한다. 어긋남은 `check_content.py`가 검사한다 |
 
 ## 10. 산출물
 - `samguk` 브랜치의 커밋들
