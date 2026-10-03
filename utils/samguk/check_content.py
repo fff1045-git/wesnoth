@@ -217,6 +217,37 @@ def logo_is_wired():
     return problems
 
 
+@check
+def game_config_copy_matches_upstream():
+    """data/samguk/game_config.cfg는 data/game_config.cfg 복사본이어야 한다.
+    복사본에만 있는 주석 줄과 game_logo 두 줄만 다를 수 있다."""
+    skip_keys = ("game_logo=", "game_logo_background=")
+
+    def lines(path):
+        return read(path).replace("\r\n", "\n").split("\n")
+
+    upstream = lines(DATA / "game_config.cfg")
+    copy = lines(CORE / "game_config.cfg")
+    known = set(upstream)
+
+    def keep(line):
+        return not line.strip().startswith(skip_keys)
+
+    want = [(n, l) for n, l in enumerate(upstream, 1) if keep(l)]
+    got = [(n, l) for n, l in enumerate(copy, 1)
+           if keep(l) and not (l.strip().startswith("#") and l not in known)]
+    for (un, a), (cn, b) in zip(want, got):
+        if a != b:
+            return [f"복사본 {cn}번째 줄이 기본 파일 {un}번째 줄과 다르다. "
+                    f"기본: {a!r} / 복사본: {b!r}"]
+    if len(want) != len(got):
+        n = min(len(want), len(got))
+        where = (got[n][0] if len(got) > n else len(copy) + 1)
+        return [f"줄 수가 다르다 (기본 {len(want)}, 복사본 {len(got)}). "
+                f"복사본 {where}번째 줄부터 어긋난다"]
+    return []
+
+
 def main():
     failed = 0
     for fn in CHECKS:
